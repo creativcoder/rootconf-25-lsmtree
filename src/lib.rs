@@ -14,7 +14,7 @@
 use std::{
     collections::{BTreeMap, VecDeque},
     fs::File,
-    io::{BufReader, Write},
+    io::{BufRead, BufReader, Write},
     path::PathBuf,
 };
 
@@ -39,7 +39,7 @@ impl LSMTree {
         }
 
         let mut sstable_mgr = SSTableManager::new(&data_dir);
-        // TODO: call `recover()` method on `sstable_mgr` here to load any existing older sstable files
+        sstable_mgr.recover();
 
         Self {
             memtable: BTreeMap::new(),
@@ -60,17 +60,17 @@ impl LSMTree {
     pub fn get(&self, k: &str) -> Option<String> {
         match self.memtable.get(k) {
             Some(Some(v)) => return Some(v.to_string()),
-            // TODO: split this match into separate arms
-            // hint: for Some(None) case, simply return `None` as a delete was performed in the memtable itself.
-            Some(None) | None => return None,
-            // TODO: in the bare `None` case, we have to read from sstables because the key `k` might reside in one of the sstables.
-            // hint: iterate over all sstable files.
-            // hint: order of iteration (most recent first) is important to avoid reading old version of values for the given key `k`.
-
-            // TODO: within the loop, call `get_sstable` on SSTableManager passing the file id and the key. Finish impl of `get_sstable` below on SSTableManager.
+            Some(None) => return None,
+            None => {
+                for i in self.sstable_mgr.sstables.iter().rev() {
+                    match self.sstable_mgr.get_sstable(*i, k) {
+                        Some(v) => return Some(v.clone()),
+                        None => {}
+                    }
+                }
+            }
         }
-
-        // TODO: add a None as a fallback return type.
+        None
     }
 
     // deletes the value associated with the given key `k`
@@ -148,17 +148,25 @@ impl SSTableManager {
 
     // retrieves the given key `k` from the list of sstables.
     pub fn get_sstable(&self, sst_file_id: usize, key: &str) -> Option<String> {
-        // TODO: open the file in the data dir with the given `sst_file_id` in read mode. Hint: use OpenOptions type from rust stdlib.
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .open(self.data_dir.join(&format!("{}.sst", sst_file_id)))
+            .unwrap();
 
-        // TODO: wrap this file in a BufReader to be able to read the file line by line. Hint: search BufReader in rust stdlib
+        let buf_reader = BufReader::new(file);
 
-        // TODO: for each line, call `read_kv_line` helper method below passing a reference to the line to get (k, v)
-        // hint: let (k,v) = read_kv_..
+        for l in buf_reader.lines() {
+            let (k, v) = read_kv_line(&l);
+            if k == key {
+                if v == TOMBSTONE_MARKER.to_string() {
+                    return None;
+                } else {
+                    return Some(v.to_string());
+                }
+            }
+        }
 
-        // TODO: perform this check: if key matches k and if the value is TOMBSTONE_MARKER return a None else return the value v cloned and wrapped in Some().
-
-        // TODO: remove the todo!() below and replace with a None as a fallback return type
-        todo!()
+        None
     }
 
     // recovers the ids of sstables from the data dir.
@@ -183,8 +191,7 @@ impl SSTableManager {
             vec![]
         };
 
-        // TODO: uncomment the line below to store the older files, thereby loading all previous file ids available for reads.
-        // self.sstables = VecDeque::from(old_sst_ids)
+        self.sstables = VecDeque::from(old_sst_ids)
     }
 }
 
