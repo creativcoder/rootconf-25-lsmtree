@@ -112,7 +112,7 @@ impl LSMTree {
         self.memtable.clear();
 
         self.sstable_mgr.add_sstable(sst_id);
-        // TODO: call compact() here on SSTableManager, as flushing adds a new file to data directory, possibly hitting compaction condition at one point.
+        self.compact();
     }
 
     // Performs compaction of sstables if compaction condition is triggered.
@@ -217,9 +217,7 @@ impl SSTableManager {
     }
 
     fn should_compact(&mut self) -> bool {
-        // TODO: check if count of sstable files is equal to field `compaction_trigger`
-        // TODO: remove the todo!() below
-        todo!()
+        self.sstables.len() == self.compaction_trigger
     }
 
     // Compacts sstables.
@@ -265,36 +263,60 @@ impl SSTableManager {
                     let (s1_k, s1_v) = read_kv_line(line_s1);
                     let (s2_k, s2_v) = read_kv_line(line_s2);
                     // TODO: compare the keys and push to `merged_map` accordingly and increment the respective line iterator.
+                    if s1_k <= s2_k {
+                        merged_map.insert(s1_k, s1_v);
+                        s1_next = s1_lines.next();
+                    } else {
+                        merged_map.insert(s2_k, s2_v);
+                        s2_next = s2_lines.next();
+                    }
                 }
                 (None, Some(line_s2)) => {
                     let (s2_k, s2_v) = read_kv_line(line_s2);
                     // TODO: insert s2_k into merged map and advance its iterator.
+                    merged_map.insert(s2_k, s2_v);
+                    s2_next = s2_lines.next();
                 }
                 (Some(line_s1), None) => {
                     let (s1_k, s1_v) = read_kv_line(line_s1);
                     // TODO: insert s1_k into merged map and advance its iterator.
+                    merged_map.insert(s1_k, s1_v);
+                    s1_next = s1_lines.next();
                 }
                 (None, None) => {
                     // TODO: we have reached the end of both files, create a temp file ("temp.sst")
+                    let temp_file_path = self.data_dir.join("temp.sst");
+                    let mut temp_file = std::fs::OpenOptions::new()
+                        .create(true)
+                        .write(true)
+                        .open(&temp_file_path)
+                        .unwrap();
 
                     // TODO: write only the non deleted keys to this file from `merged_map`
+                    for (k, v) in merged_map {
+                        if v != TOMBSTONE_MARKER.to_string() {
+                            writeln!(temp_file, "{}:{}", k, v).unwrap();
+                        }
+                    }
 
                     // TODO: ensure file is synced to disk from file system buffers.
+                    temp_file.sync_data().unwrap();
 
                     // TODO: remove the oldest files
+                    std::fs::remove_file(&s1_path).unwrap();
+                    std::fs::remove_file(&s2_path).unwrap();
 
                     // TODO: rename the temp file ("temp.sst") to the 2nd oldest file.
+                    std::fs::rename(&temp_file_path, s2_path).unwrap();
 
                     // TODO: pop remove the oldest file from front of sstables queue.
+                    self.sstables.pop_front();
 
                     // TODO: break from loop
+                    break;
                 }
             }
-
-            todo!("remove me after implementing the TODOs above in the loop");
         }
-        // TODO: remove the todo!() below
-        todo!()
     }
 }
 
