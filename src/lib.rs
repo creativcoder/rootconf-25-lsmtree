@@ -5,34 +5,37 @@
 //! Phase 1: In-memory LSM Tree
 //! Objective: Add necessary field and method implementations for an in-memory LSM Tree and make the test below pass.
 
+use std::collections::BTreeMap;
+
 pub struct LSMTree {
-    // add a field `memtable` here which is a btree map of String as keys and Option<String> as values
+    memtable: BTreeMap<String, Option<String>>,
 }
 
 impl LSMTree {
     // creates a new instance of LSM Tree
     pub fn new() -> Self {
-        // TODO: Initialize the `memtable` field with sane defaults.
-        todo!()
+        Self {
+            memtable: BTreeMap::new(),
+        }
     }
 
     // add k and v into the memtable
     pub fn put(&mut self, k: &str, v: &str) {
-        // TODO: insert the given key k and value v to the memtable
-        todo!()
+        self.memtable.insert(k.to_string(), v.to_string().into());
     }
 
     // return the value associated with the given key
     pub fn get(&self, k: &str) -> Option<String> {
-        // TODO: retrieve the value for given k from memtable
-        todo!()
+        match self.memtable.get(k) {
+            Some(Some(v)) => return Some(v.to_string()),
+            Some(None) | None => return None,
+        }
     }
 
     // deletes the value associated with the given key `k`
-    // NOTE: deletes are just a put in disguise in an LSM Tree, with None as the value in this implementation.
+    // NOTE: deletes are just a put in disguise in an LSM Tree, with None as the value in this case.
     pub fn delete(&mut self, k: &str) {
-        // TODO: set the value to None for the given key in memtable.
-        todo!()
+        self.memtable.insert(k.to_string(), None);
     }
 }
 
@@ -40,7 +43,6 @@ impl LSMTree {
 mod tests {
     use crate::LSMTree;
 
-    // TODO: make this test pass
     #[test]
     fn test_lsm_basic_crud() {
         let mut lsmtree = LSMTree::new();
