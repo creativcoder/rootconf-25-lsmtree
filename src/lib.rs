@@ -13,8 +13,11 @@
 use std::{
     collections::{BTreeMap, VecDeque},
     fs::File,
+    io::Write,
     path::PathBuf,
 };
+
+use std::fmt::Write as _;
 
 // This is a byte marker used to denote a deletion in LSM Tree SSTable files.
 // 💡 Actual implementations use something different, like a 0x01 (in rocksdb and leveldb)
@@ -22,34 +25,33 @@ const TOMBSTONE_MARKER: char = '🪦';
 
 pub struct LSMTree {
     memtable: BTreeMap<String, Option<String>>,
-    // TODO: add a field memtable_limit that stores the max amount of items to be kept in memtable. Hint: use `usize` as the data type.
-
-    // TODO: add a field called `sstable_mgr` of type SSTableManager. Look below for a struct named `SStableManager`
+    memtable_limit: usize,
+    sstable_mgr: SSTableManager,
 }
 
 impl LSMTree {
     // creates a new instance of LSM Tree
     pub fn new() -> Self {
-        // TODO: declare a variable `data_dir` which is a PathBuf object with path as "data" (in the current directory). Look for `PathBuf` type in rust stdlib.
-        // the "data" directory is where we'll store our sstables.
+        let data_dir = PathBuf::from("data");
 
-        // TODO: create the "data" directory if it doesn't exist using the PathBuf object above. hint: lookup `create_dir` in rust stdlib
+        if !data_dir.exists() {
+            std::fs::create_dir(&data_dir).unwrap();
+        }
 
         Self {
             memtable: BTreeMap::new(),
-            // TODO: add the initialization of memtable_limit field from the updated struct definition above.
-            // Hint: keep a memtable size limit of 10 to start with.
+            memtable_limit: 10,
 
-            // TODO: initialize SSTableManager (the new() method)
-            // passing `data_dir` (a PathBuf) to it as a reference.
+            sstable_mgr: SSTableManager::new(&data_dir),
         }
     }
 
     // add k and v into the memtable
     pub fn put(&mut self, k: &str, v: &str) {
         self.memtable.insert(k.to_string(), Some(v.to_string()));
-        // TODO: check if memtable size threshold is reached, and perform `memtable_flush` if true.
-        // Hint: you can check the size of the BtreeMap. Look for rust std lib docs.
+        if self.memtable.len() == self.memtable_limit {
+            self.flush_memtable();
+        }
     }
 
     // return the value associated with the given key
@@ -68,23 +70,31 @@ impl LSMTree {
 
     // flushes the memtable contents to a file
     fn flush_memtable(&mut self) {
-        // TODO: check if memtable is already empty, if true, return.
+        if self.memtable.is_empty() {
+            return;
+        }
 
-        // TODO: get a new sstable file and its id by calling method `new_sstable` on SSTableManager in LSMTree struct. Implement `new_sstable` method below.
-        // hint: let (mut sst_file, sst_id) = ...
+        let (mut sst_file, sst_id) = self.sstable_mgr.new_sstable();
 
-        // TODO: write all key value pairs from memtable to the new sstable file each on a new line as: "k:v" (where k: key and v: value) followed by a newline (\n)
-        // for the deleted key, write the value as TOMBSTONE_MARKER. As we don't delete keys in a LSM Tree. They are handled later by compaction.
+        for (k, v) in &self.memtable {
+            let mut line = String::new();
+            match v {
+                Some(v) => {
+                    writeln!(&mut line, "{}:{}", k, v).unwrap();
+                    sst_file.write_all(line.as_bytes()).unwrap();
+                }
+                None => {
+                    writeln!(&mut line, "{}:{}", k, TOMBSTONE_MARKER).unwrap();
+                    sst_file.write_all(line.as_bytes()).unwrap();
+                }
+            }
+        }
 
-        // TODO: ensure file is fully synced and flushed in OS file system buffers.
-        // Hint: see methods on File instance: https://doc.rust-lang.org/std/fs/struct.File.html
+        sst_file.sync_data().unwrap();
 
-        // TODO: clear the memtable, as our data is in file now.
+        self.memtable.clear();
 
-        // TODO: add the new sstable id by calling `add_sstable` method on SSTableManager, so we have track of it in our LSM instance.
-
-        // TODO: remove the todo!() below
-        todo!()
+        self.sstable_mgr.add_sstable(sst_id);
     }
 }
 
@@ -108,24 +118,21 @@ impl SSTableManager {
     }
 
     pub fn new_sstable(&mut self) -> (File, usize) {
-        // TODO: increment the next_sstable_id by 1
+        self.next_sstable_id += 1;
 
-        // TODO: create a file with create, write and append mode using the incremented file id. The file should be inside data/ and named as x.sst where x is the
-        // incremented file id - i.e., data/1.sst
-        // hint: read up on `OpenOptions` from rust std lib on how to create a file.
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(true)
+            .open(self.data_dir.join(&format!("{}.sst", self.next_sstable_id)))
+            .unwrap();
 
-        // TODO: return created file and the id as a 2 element tuple (foo, bar)
-
-        // TODO: remove the todo!() below
-        todo!()
+        (file, self.next_sstable_id)
     }
 
     // Adds the give sstable id to the queue of sstables.
     pub fn add_sstable(&mut self, id: usize) {
-        // TODO: add the given `id` to `sstables` queue
-
-        // TODO: remove the todo!() below
-        todo!()
+        self.sstables.push_back(id);
     }
 }
 
@@ -153,7 +160,6 @@ mod tests {
         assert!(lsmtree.get("hello").is_none());
     }
 
-    // TODO: make this pass
     #[test]
     fn test_lsm_trigger_flush_basic() {
         clear_data_dir();
