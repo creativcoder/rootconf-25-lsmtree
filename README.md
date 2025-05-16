@@ -31,7 +31,7 @@ Each phase has a few tests you need to make them pass to mark it as fixed.
 Each phase above also contains a git tag `phase1_fix` that contains a fix to the exercises/todos in the code.
 If you cannot get past the exercises at a given phase, feel free to checkout the subsequent phases or the fix for that phase using `git checkout <tag name>`.
 
-To check the final version of the code and run tests: `git checkout phase4_fix` and run: `cargo test`
+To check the final version of the code and run tests: `git checkout phase4_fix` and run: `cargo test -- --test-threads=1` (test-threads flag is required to ensure they run in sequence)
 
 ### Development environment setup
 
