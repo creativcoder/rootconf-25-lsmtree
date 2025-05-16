@@ -4,6 +4,8 @@ This library implements a toy LSM Tree implementation
 
 Part of rootconf-25 workshop.
 
+Link to slides: https://gamma.app/docs/Build-your-own-LSM-Tree-in-Rust-o76zgbwlwsd10nv?mode=present#card-8jgga5spmbcqxok
+
 ### Getting started
 
 - Clone this repository
